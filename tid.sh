@@ -1,66 +1,80 @@
-# setuwifi.sh
-
 #!/usr/bin/env bash
 set -euo pipefail
 
-TEMPLATE="TID-N1F"
+# ========================================
+# TID Wi-Fi Setup
+# ========================================
 
-# NetworkManagerの確認
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+
+CA_CERT="$SCRIPT_DIR/nacacert-pem.cer"
+
+PROFILE="TID-N1F"
+SSID="tid-student_N1F"
+
+IDENTITY="241063kojima"
+DOMAIN_SUFFIX="TID-S3F-RD01.local"
+
+# ========================================
+# Check dependencies
+# ========================================
+
 if ! command -v nmcli >/dev/null 2>&1; then
     echo "Error: nmcli が見つかりません"
     exit 1
 fi
-
-# テンプレートの確認
-if ! nmcli connection show "$TEMPLATE" >/dev/null 2>&1; then
-    echo "Error: テンプレート '$TEMPLATE' がありません"
-    exit 1
-fi
-
-# CA証明書の確認
-SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-CA_CERT="$SCRIPT_DIR/src/nacacert-pem.cer"
 
 if [[ ! -f "$CA_CERT" ]]; then
     echo "Error: CA証明書が見つかりません: $CA_CERT"
     exit 1
 fi
 
-FLOORS=(
-    N1F N2F N3F N4F N5F
-    N6F N7F N8F N9F
-    S1F S2F S3F S4F
-)
+# ========================================
+# Authentication
+# ========================================
 
-echo "Wi-Fi設定を登録します"
-echo "Template: $TEMPLATE"
+read -rsp "Wi-Fiパスワード: " WIFI_PASSWORD
 echo
 
-for floor in "${FLOORS[@]}"; do
-    SSID="tid-student_${floor}"
-    PROFILE="$SSID"
+if [[ -z "$WIFI_PASSWORD" ]]; then
+    echo "Error: パスワードが空です"
+    exit 1
+fi
 
-    # 既に登録されている場合はスキップ
-    if nmcli connection show "$PROFILE" >/dev/null 2>&1; then
-        echo "[SKIP] $PROFILE は登録済み"
-        continue
-    fi
+# ========================================
+# Create / Update connection
+# ========================================
 
-    echo "[ADD] $SSID"
+echo "Wi-Fi設定を登録します..."
 
-    # 既存プロファイルを複製
-    sudo nmcli connection clone "$TEMPLATE" "$PROFILE"
+if nmcli connection show "$PROFILE" >/dev/null 2>&1; then
+    echo "[UPDATE] $PROFILE"
+else
+    echo "[ADD] $PROFILE"
 
-    # SSIDと接続名を設定
-    sudo nmcli connection modify "$PROFILE" \
-        connection.id "$PROFILE" \
-        802-11-wireless.ssid "$SSID" \
-        connection.autoconnect yes
+    sudo nmcli connection add \
+        type wifi \
+        con-name "$PROFILE" \
+        ifname "*" \
+        ssid "$SSID"
+fi
 
-    echo "[OK] $SSID"
-done
+sudo nmcli connection modify "$PROFILE" \
+    connection.id "$PROFILE" \
+    connection.autoconnect yes \
+    802-11-wireless.ssid "$SSID" \
+    802-11-wireless-security.key-mgmt wpa-eap \
+    802-1x.eap peap \
+    802-1x.identity "$IDENTITY" \
+    802-1x.password "$WIFI_PASSWORD" \
+    802-1x.phase2-auth mschapv2 \
+    802-1x.ca-cert "$CA_CERT" \
+    802-1x.domain-suffix-match "$DOMAIN_SUFFIX" \
+    ipv4.method auto \
+    ipv6.method auto
+
+unset WIFI_PASSWORD
 
 echo
-echo "Wi-Fi設定の登録が完了しました"
+echo "[OK] Wi-Fi設定が完了しました"
 nmcli -f NAME,TYPE connection show
-
