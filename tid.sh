@@ -1,4 +1,3 @@
-```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -111,4 +110,3 @@ echo "================================"
 nmcli -f NAME,TYPE connection show
 
 (( FAILED == 0 ))
-```
