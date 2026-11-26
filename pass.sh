@@ -2,14 +2,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# sudo認証
 sudo -v
 
-# 既存のN1Fプロファイルからパスワードを取得
-WIFI_PASSWORD="$(sudo nmcli --show-secrets -g 802-1x.password connection show TID-N1F)"
+read -rsp "TID Wi-Fi パスワード: " WIFI_PASSWORD
+echo
 
-if [[ -z "$WIFI_PASSWORD" || "$WIFI_PASSWORD" == "--" ]]; then
-    echo "[ERROR] TID-N1Fに保存済みパスワードがありません"
+if [[ -z "$WIFI_PASSWORD" ]]; then
+    echo "[ERROR] パスワードが空です"
     exit 1
 fi
 
@@ -21,6 +20,11 @@ FLOORS=(
 for floor in "${FLOORS[@]}"; do
     PROFILE="tid-student_${floor}"
 
+    if ! sudo nmcli connection show "$PROFILE" >/dev/null 2>&1; then
+        echo "[SKIP] $PROFILE が存在しません"
+        continue
+    fi
+
     sudo nmcli connection modify "$PROFILE" \
         802-1x.password "$WIFI_PASSWORD" \
         802-1x.password-flags 0
@@ -30,5 +34,4 @@ done
 
 unset WIFI_PASSWORD
 
-echo "全13プロファイルへのパスワード設定が完了しました"
-
+echo "全プロファイルへのパスワード設定が完了しました"
